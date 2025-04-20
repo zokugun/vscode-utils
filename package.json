@@ -1,0 +1,46 @@
+{
+	"name": "@zokugun/vscode-utils",
+	"description": "Some utilities for VSCode extensions",
+	"version": "0.0.0",
+	"author": {
+		"name": "Baptiste Augrain",
+		"email": "daiyam@zokugun.org"
+	},
+	"license": "MIT",
+	"homepage": "https://github.com/zokugun/vscode-utils",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/zokugun/vscode-utils.git"
+	},
+	"bugs": {
+		"url": "https://github.com/zokugun/vscode-utils/issues"
+	},
+	"main": "lib/index.js",
+	"scripts": {
+		"commit": "cz",
+		"compile": "tsc -p src",
+		"lint": "xo",
+		"prepare": "husky; fixpack || true",
+		"prepublishOnly": "npm run compile",
+		"release": "release-it",
+		"watch": "tsc -watch -p src"
+	},
+	"dependencies": {
+		"fs-extra": "^11.3.0"
+	},
+	"devDependencies": {
+		"@commitlint/cli": "^19.7.1",
+		"@commitlint/config-conventional": "^19.7.1",
+		"@types/fs-extra": "^11.0.4",
+		"@types/node": "^20.14.8",
+		"@types/vscode": "^1.23.0",
+		"commitizen": "^4.3.1",
+		"fixpack": "^4.0.0",
+		"husky": "^9.1.7",
+		"lint-staged": "^15.4.3",
+		"release-it": "^18.1.2",
+		"typescript": "^5.7.3",
+		"xo": "0.60.0"
+	},
+	"keywords": []
+}
