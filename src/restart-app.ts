@@ -3,18 +3,29 @@ import path from 'path';
 import process from 'process';
 import fse from 'fs-extra';
 import vscode from 'vscode';
+import { EDITOR_MODE, EditorMode } from './editor.js';
 
-export async function restartApp(): Promise<void> {
-	const product = JSON.parse(await fse.readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8')) as { nameLong: string; applicationName: string };
-
-	if(process.platform === 'darwin') {
-		await restartMac(product);
-	}
-	else if(process.platform === 'win32') {
-		await restartWindows(product);
+export async function restartApp(extensionName: string): Promise<void> {
+	if(EDITOR_MODE === EditorMode.Theia) {
+		await vscode.window.showInformationMessage(
+			`Source: ${extensionName}\n\nThe editor needs to be restarted before continuing. You need to do it manually. Thx`,
+			{
+				modal: true,
+			},
+		);
 	}
 	else {
-		await restartLinux(product);
+		const product = JSON.parse(await fse.readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8')) as { nameLong: string; applicationName: string };
+
+		if(process.platform === 'darwin') {
+			await restartMac(product);
+		}
+		else if(process.platform === 'win32') {
+			await restartWindows(product);
+		}
+		else {
+			await restartLinux(product);
+		}
 	}
 }
 
