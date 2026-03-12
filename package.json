@@ -17,13 +17,14 @@
 	},
 	"main": "lib/index.js",
 	"scripts": {
-		"commit": "cz",
-		"compile": "tsc -p src",
+		"build": "npm run compile:src",
+		"compile:src": "tsc -p src",
 		"lint": "xo",
+		"lint:fix": "xo --fix",
 		"prepare": "husky; fixpack || true",
-		"prepublishOnly": "npm run compile",
+		"prepublishOnly": "npm run build",
 		"release": "release-it",
-		"watch:src": "tsc -watch -p src"
+		"watch:src": "tsc-watch -p src"
 	},
 	"dependencies": {
 		"@zokugun/fs-extra-plus": "^0.3.6",
@@ -32,16 +33,20 @@
 	"devDependencies": {
 		"@commitlint/cli": "^19.7.1",
 		"@commitlint/config-conventional": "^19.7.1",
-		"@types/fs-extra": "^11.0.4",
 		"@types/node": "^20.14.8",
 		"@types/vscode": "^1.23.0",
-		"commitizen": "^4.3.1",
 		"fixpack": "^4.0.0",
 		"husky": "^9.1.7",
-		"lint-staged": "^15.4.3",
-		"release-it": "^18.1.2",
+		"lint-staged": "^16.1.4",
+		"release-it": "^19.2.4",
+		"tsc-watch": "^7.2.0",
 		"typescript": "^5.7.3",
 		"xo": "0.60.0"
+	},
+	"overrides": {
+		"terser-webpack-plugin": {
+			"serialize-javascript": "^7.0.3"
+		}
 	},
 	"keywords": []
 }

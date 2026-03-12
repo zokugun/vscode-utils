@@ -16,11 +16,14 @@
 		"bin",
 		"exports",
 		"main",
+		"module",
 		"types",
+		"typesVersions",
 		"scripts",
 		"dependencies",
 		"devDependencies",
 		"optionalDependencies",
+		"overrides",
 		"keywords"
 	],
 	"finalNewLine": true
