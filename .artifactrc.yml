@@ -9,3 +9,5 @@ artifacts:
     version: 0.4.3
   "@daiyam/artifact-npm-zokugun":
     version: 0.2.2
+  "@daiyam/artifact-npm":
+    version: 0.6.2
