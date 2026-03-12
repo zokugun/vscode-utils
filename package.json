@@ -23,10 +23,11 @@
 		"prepare": "husky; fixpack || true",
 		"prepublishOnly": "npm run compile",
 		"release": "release-it",
-		"watch": "tsc -watch -p src"
+		"watch:src": "tsc -watch -p src"
 	},
 	"dependencies": {
-		"fs-extra": "^11.3.0"
+		"@zokugun/fs-extra-plus": "^0.3.6",
+		"@zokugun/xtry": "^0.11.1"
 	},
 	"devDependencies": {
 		"@commitlint/cli": "^19.7.1",

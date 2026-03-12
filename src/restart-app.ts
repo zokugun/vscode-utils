@@ -1,11 +1,23 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import process from 'process';
-import fse from 'fs-extra';
+import fse from '@zokugun/fs-extra-plus/async';
+import {
+	type AsyncDResult, err, OK, ok,
+} from '@zokugun/xtry';
 import vscode from 'vscode';
 import { EDITOR_MODE, EditorMode } from './editor.js';
 
-export async function restartApp(extensionName: string): Promise<void> {
+type Logger = {
+	error: (...args: unknown[]) => void;
+	info: (...args: unknown[]) => void;
+};
+
+type Options = {
+	binary?: string;
+};
+
+export async function restartApp(extensionName: string, logger: Logger, options?: Options): Promise<void> {
 	if(EDITOR_MODE === EditorMode.Theia) {
 		await vscode.window.showInformationMessage(
 			`Source: ${extensionName}\n\nThe editor needs to be restarted before continuing. You need to do it manually. Thx`,
@@ -15,32 +27,45 @@ export async function restartApp(extensionName: string): Promise<void> {
 		);
 	}
 	else {
-		const product = JSON.parse(await fse.readFile(path.join(vscode.env.appRoot, 'product.json'), 'utf8')) as { nameLong: string; applicationName: string };
+		const file = path.join(vscode.env.appRoot, 'product.json');
+		const productResult = await fse.readJSON(file);
+		if(productResult.fails) {
+			logger.error(`Cannot read "${file}"`);
 
-		if(process.platform === 'darwin') {
-			await restartMac(product);
+			return;
 		}
-		else if(process.platform === 'win32') {
-			await restartWindows(product);
-		}
-		else {
-			await restartLinux(product);
+
+		const product = productResult.value as { nameLong: string; applicationName: string };
+
+		const restartResult
+			= process.platform === 'darwin' ? await restartMac(product)
+				: (process.platform === 'win32' ? await restartWindows(product)
+					: await restartLinux(product, options));
+
+		if(restartResult.fails) {
+			logger.error(restartResult.error);
 		}
 	}
 }
 
-async function restartMac({ nameLong, applicationName }: { nameLong: string; applicationName: string }): Promise<void> {
+async function restartMac({ nameLong, applicationName }: { nameLong: string; applicationName: string }): AsyncDResult {
 	const match = /(.*\.app)\/Contents\/Frameworks\//.exec(process.execPath);
 	const appPath = match ? match[1] : `/Applications/${nameLong}.app`;
 	const binary = await searchBinary(`${appPath}/Contents/Resources/app/bin/`, applicationName);
 
-	spawn('osascript', ['-e', `quit app "${nameLong}"`, '-e', 'delay 1', '-e', `do shell script quoted form of "${binary}"`], {
+	if(binary.fails) {
+		return binary;
+	}
+
+	spawn('osascript', ['-e', `quit app "${nameLong}"`, '-e', 'delay 1', '-e', `do shell script quoted form of "${binary.value}"`], {
 		detached: true,
 		stdio: 'ignore',
 	});
+
+	return OK;
 }
 
-async function restartWindows({ applicationName }: { applicationName: string }): Promise<void> {
+async function restartWindows({ applicationName }: { applicationName: string }): AsyncDResult {
 	const appHomeDir = path.dirname(process.execPath);
 	const exeName = path.basename(process.execPath);
 
@@ -49,69 +74,110 @@ async function restartWindows({ applicationName }: { applicationName: string }):
 		path.join(vscode.env.appRoot, 'bin'),
 	], applicationName);
 
-	spawn(process.env.comspec ?? 'cmd', [`/C taskkill /F /IM ${exeName} >nul && timeout /T 1 && "${binary}"`], {
+	if(binary.fails) {
+		return binary;
+	}
+
+	spawn(process.env.comspec ?? 'cmd', [`/C taskkill /F /IM ${exeName} >nul && timeout /T 1 && "${binary.value}"`], {
 		detached: true,
 		stdio: 'ignore',
 		windowsVerbatimArguments: true,
 		windowsHide: true,
 	});
+
+	return OK;
 }
 
-async function restartLinux({ applicationName }: { applicationName: string }): Promise<void> {
-	const appHomeDir = path.dirname(process.execPath);
-	const binary = await searchBinary([
-		path.join(appHomeDir, 'bin'),
-		path.join(vscode.env.appRoot, 'bin'),
-	], applicationName);
+async function restartLinux({ applicationName }: { applicationName: string }, options?: Options): AsyncDResult {
+	if(path.basename(process.execPath) === 'electron') {
+		let binary = options?.binary ?? '';
 
-	spawn('/bin/sh', ['-c', `killall "${process.execPath}" && sleep 1 && killall -9 "${process.execPath}" && sleep 1 && "${binary}"`], {
-		detached: true,
-		stdio: 'ignore',
-	});
-}
+		if(!binary) {
+			const paths = [path.join(vscode.env.appRoot, 'bin')];
 
-async function searchAppBinary(appHomeDir: string, appName: string): Promise<string | null> {
-	try {
-		let files = await fse.readdir(appHomeDir);
-
-		if(files.length === 1) {
-			return path.join(appHomeDir, files[0]);
-		}
-
-		// remove tunnel
-		files = files.filter((file) => !file.includes('-tunnel'));
-
-		if(files.length === 1) {
-			return path.join(appHomeDir, files[0]);
-		}
-
-		if(process.platform === 'win32') {
-			// select *.cmd
-			const cmdFiles = files.filter((file) => file.endsWith('.cmd') && file.toLowerCase().includes(appName.toLowerCase()));
-
-			if(cmdFiles.length === 1) {
-				return path.join(appHomeDir, cmdFiles[0]);
+			const parts = vscode.env.appRoot.split(path.sep);
+			if(parts.pop() === 'app' && parts.pop() === 'resources') {
+				paths.push(parts.join(path.sep));
 			}
+
+			const result = await searchBinary(paths, applicationName);
+			if(result.fails) {
+				return result;
+			}
+
+			binary = result.value;
 		}
 
-		const binary = files.find((file) => file.toLowerCase().includes(appName.toLowerCase()));
+		const pid = process.env.VSCODE_PID;
 
-		if(binary) {
-			return path.join(appHomeDir, binary);
+		spawn('/bin/sh', ['-c', `kill -15 ${pid} && sleep 1 && (kill -9 ${pid} && sleep 1 || true) && "${binary}"`], {
+			detached: true,
+			stdio: 'ignore',
+		});
+	}
+	else {
+		const appHomeDir = path.dirname(process.execPath);
+		const binary = await searchBinary([
+			path.join(appHomeDir, 'bin'),
+			path.join(vscode.env.appRoot, 'bin'),
+		], applicationName);
+
+		if(binary.fails) {
+			return binary;
 		}
-	}
-	catch {
+
+		spawn('/bin/sh', ['-c', `killall "${process.execPath}" && sleep 1 && killall -9 "${process.execPath}" && sleep 1 && "${binary.value}"`], {
+			detached: true,
+			stdio: 'ignore',
+		});
 	}
 
-	return null;
+	return OK;
 }
 
-async function searchBinary(binPath: string | string[], appName: string): Promise<string> {
+async function searchAppBinary(appHomeDir: string, appName: string): AsyncDResult<string> {
+	const result = await fse.readdir(appHomeDir);
+	if(result.fails) {
+		return err(`Cannot find binary for app "${appName}" in "${appHomeDir}"`);
+	}
+
+	let files = result.value;
+
+	if(files.length === 1) {
+		return ok(path.join(appHomeDir, files[0]));
+	}
+
+	// remove tunnel
+	files = files.filter((file) => !file.includes('-tunnel'));
+
+	if(files.length === 1) {
+		return ok(path.join(appHomeDir, files[0]));
+	}
+
+	if(process.platform === 'win32') {
+		// select *.cmd
+		const cmdFiles = files.filter((file) => file.endsWith('.cmd') && file.toLowerCase().includes(appName.toLowerCase()));
+
+		if(cmdFiles.length === 1) {
+			return ok(path.join(appHomeDir, cmdFiles[0]));
+		}
+	}
+
+	const binary = files.find((file) => file.toLowerCase().includes(appName.toLowerCase()));
+
+	if(binary) {
+		return ok(path.join(appHomeDir, binary));
+	}
+
+	return err(`Cannot find binary for app "${appName}" in "${appHomeDir}"`);
+}
+
+async function searchBinary(binPath: string | string[], appName: string): AsyncDResult<string> {
 	if(Array.isArray(binPath)) {
 		for(const path of binPath) {
 			const binary = await searchAppBinary(path, appName);
 
-			if(binary) {
+			if(!binary.fails) {
 				return binary;
 			}
 		}
@@ -119,10 +185,10 @@ async function searchBinary(binPath: string | string[], appName: string): Promis
 	else {
 		const binary = await searchAppBinary(binPath, appName);
 
-		if(binary) {
+		if(!binary.fails) {
 			return binary;
 		}
 	}
 
-	throw new Error('Cannot determine binary path');
+	return err(`Cannot find binary for app "${appName}" in "${JSON.stringify(binPath)}"`);
 }
