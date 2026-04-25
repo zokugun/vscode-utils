@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.3.1 | 2026-04-25
+- update dependencies
+
 ## v0.3.0 | 2026-04-12
 - on linux, detect shared electron and use binary option
 
